@@ -11,13 +11,18 @@ import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { authApi, handleApiError } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/lib/auth-context"
 
 export default function RegisterPage() {
   const searchParams = useSearchParams()
   const defaultRole = searchParams.get("role") || "donor"
   const defaultType = defaultRole === "hospital" ? "hospital" : "individual"
+  const { toast } = useToast()
+  const { login } = useAuth()
 
   const [step, setStep] = useState<"type" | "info" | "phone" | "otp">("type")
   const [accountType, setAccountType] = useState<"individual" | "hospital">(defaultType as any)
@@ -27,7 +32,10 @@ export default function RegisterPage() {
   const [hospitalId, setHospitalId] = useState("")
   const [bloodGroup, setBloodGroup] = useState("")
   const [phoneNumber, setPhoneNumber] = useState("")
+  const [address, setAddress] = useState("")
   const [otp, setOtp] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [otpSent, setOtpSent] = useState(false)
 
   const handleTypeSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,25 +47,133 @@ export default function RegisterPage() {
     setStep("phone")
   }
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, we would send the OTP to the phone number
-    console.log("Sending OTP to", phoneNumber)
-    setStep("otp")
+    setLoading(true)
+
+    try {
+      const response = await authApi.sendOtp(phoneNumber)
+      
+      if (response.success) {
+        toast({
+          title: "OTP Sent",
+          description: `OTP has been sent to ${phoneNumber}`,
+        })
+        
+        // In development, show the OTP
+        if (response.data?.otp) {
+          toast({
+            title: "Development OTP",
+            description: `Your OTP is: ${response.data.otp}`,
+            variant: "default",
+          })
+        }
+        
+        setOtpSent(true)
+        setStep("otp")
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to send OTP",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: handleApiError(error),
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
+  const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, we would verify the OTP and create the account
-    console.log("Verifying OTP", otp)
-    if (accountType === "individual") {
-      console.log("Creating individual account for", { name, role, bloodGroup, phoneNumber })
-      // Redirect to donor/seeker dashboard on success
-      window.location.href = "/dashboard"
-    } else {
-      console.log("Creating hospital account for", { hospitalName, hospitalId, phoneNumber })
-      // Redirect to hospital dashboard on success
-      window.location.href = "/hospital-dashboard"
+    setLoading(true)
+
+    try {
+      // First try to login with OTP in case user already exists
+      let userExists = false
+      try {
+        const loginResponse = await authApi.loginWithOtp(phoneNumber, otp)
+        
+        if (loginResponse.success && loginResponse.data) {
+          // User exists and OTP is valid, just login
+          const existingUser = loginResponse.data.user
+          
+          if (existingUser) {
+            login(loginResponse.data.token, existingUser)
+            
+            toast({
+              title: "Login Successful",
+              description: "Welcome back!",
+            })
+            
+            // Redirect based on user type
+            if (existingUser.user_type === "hospital") {
+              window.location.href = "/hospital-dashboard"
+            } else {
+              window.location.href = "/dashboard"
+            }
+            return
+          }
+        }
+      } catch (loginError) {
+        // User doesn't exist or other login error - proceed with registration
+        console.log("Login failed, proceeding with registration:", loginError)
+      }
+      
+      // User doesn't exist, proceed with registration
+      const userData = {
+        phone_number: phoneNumber,
+        user_type: accountType,
+        address: address || undefined,
+        ...(accountType === "individual" 
+          ? {
+              name,
+              role,
+              ...(role === "donor" && bloodGroup ? { blood_group: bloodGroup } : {})
+            }
+          : {
+              hospital_name: hospitalName,
+              hospital_id: hospitalId
+            }
+        )
+      }
+
+      const registerResponse = await authApi.register(userData)
+      
+      if (registerResponse.success && registerResponse.data) {
+        login(registerResponse.data.token, registerResponse.data.user)
+        
+        toast({
+          title: "Registration Successful",
+          description: "Your account has been created successfully!",
+        })
+        
+        // Redirect based on account type
+        if (accountType === "individual") {
+          window.location.href = "/dashboard"
+        } else {
+          window.location.href = "/hospital-dashboard"
+        }
+      } else {
+        toast({
+          title: "Registration Failed",
+          description: registerResponse.message || "Failed to create account",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: handleApiError(error),
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -190,6 +306,16 @@ export default function RegisterPage() {
                 </>
               )}
 
+              <div className="space-y-2">
+                <Label htmlFor="address">Address (Optional)</Label>
+                <Input
+                  id="address"
+                  placeholder="Enter your address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                />
+              </div>
+
               <Button type="submit" className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white">
                 Continue
               </Button>
@@ -211,8 +337,19 @@ export default function RegisterPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white">
-                Send OTP
+              <Button 
+                type="submit" 
+                className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending OTP...
+                  </>
+                ) : (
+                  "Send OTP"
+                )}
               </Button>
               <Button type="button" variant="outline" className="w-full" onClick={() => setStep("info")}>
                 Back
@@ -232,10 +369,27 @@ export default function RegisterPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white">
-                Create Account
+              <Button 
+                type="submit" 
+                className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Account...
+                  </>
+                ) : (
+                  "Create Account"
+                )}
               </Button>
-              <Button type="button" variant="outline" className="w-full" onClick={() => setStep("phone")}>
+              <Button 
+                type="button" 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => setStep("phone")}
+                disabled={loading}
+              >
                 Back
               </Button>
             </form>

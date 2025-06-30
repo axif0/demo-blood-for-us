@@ -7,27 +7,26 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Checkbox } from "@/components/ui/checkbox"
-import { AlertTriangle, Clock, Send, Save } from "lucide-react"
-import { useState } from "react"
+import { AlertTriangle, Clock, Save, ArrowLeft } from "lucide-react"
+import { useState, useEffect } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { requestApi, handleApiError } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 
-export default function CreateRequestPage() {
+export default function EditRequestPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
+  const params = useParams()
+  const requestId = parseInt(params.id as string)
+  
   const [saving, setSaving] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
 
   // Form state
   const [formData, setFormData] = useState({
-    patient_type: "self",
     patient_name: "",
-    age: "",
-    gender: "",
     blood_group: "",
     units_needed: 1,
     urgency: "medium",
@@ -36,25 +35,71 @@ export default function CreateRequestPage() {
     hospital_address: "",
     hospital_city: "",
     hospital_area: "",
-    contact_person: "",
-    contact_phone: user?.phone_number || "",
-    contact_email: "",
-    reason: "",
+    contact_phone: "",
     description: "",
-    share_patient_name: true,
-    share_reason: true,
-    share_contact: true
+    status: "active"
   })
+
+  // Load existing request data
+  useEffect(() => {
+    if (requestId) {
+      loadRequestData()
+    }
+  }, [requestId])
+
+  const loadRequestData = async () => {
+    try {
+      const response = await requestApi.getRequestById(requestId)
+      
+      if (response.success && response.data) {
+        const request = response.data.request
+        
+        // Parse the hospital address back into components
+        const addressParts = request.hospital_address.split(', ')
+        const hospitalAddress = addressParts[0] || ''
+        const hospitalArea = addressParts[1] || ''
+        const hospitalCity = addressParts[2] || ''
+
+        setFormData({
+          patient_name: request.patient_name || "",
+          blood_group: request.blood_group || "",
+          units_needed: request.units_needed || 1,
+          urgency: request.urgency || "medium",
+          required_by: request.required_by ? request.required_by.split('T')[0] : "",
+          hospital_name: request.hospital_name || "",
+          hospital_address: hospitalAddress,
+          hospital_city: hospitalCity,
+          hospital_area: hospitalArea,
+          contact_phone: request.contact_number || "",
+          description: request.description || "",
+          status: request.status || "active"
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to load request data",
+          variant: "destructive",
+        })
+        router.push('/dashboard/requests')
+      }
+    } catch (error) {
+      toast({
+        title: "Error", 
+        description: handleApiError(error),
+        variant: "destructive",
+      })
+      router.push('/dashboard/requests')
+    } finally {
+      setInitialLoading(false)
+    }
+  }
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   const validateForm = () => {
-    const required = [
-      'patient_name', 'blood_group', 'hospital_name', 'hospital_address', 
-      'contact_person', 'contact_phone', 'required_by'
-    ]
+    const required = ['patient_name', 'blood_group', 'hospital_name', 'hospital_address', 'contact_phone', 'required_by']
     
     for (const field of required) {
       if (!formData[field as keyof typeof formData]) {
@@ -67,7 +112,6 @@ export default function CreateRequestPage() {
       }
     }
 
-    // Validate required_by date is in the future
     const requiredByDate = new Date(formData.required_by)
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -84,42 +128,36 @@ export default function CreateRequestPage() {
     return true
   }
 
-  const handleSaveDraft = async () => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to save draft",
-        variant: "destructive",
-      })
-      return
-    }
+  const handleSaveChanges = async () => {
+    if (!validateForm()) return
 
     setSaving(true)
     try {
-      const requestData = {
+      const updateData = {
         patient_name: formData.patient_name,
         blood_group: formData.blood_group,
         units_needed: formData.units_needed,
         urgency: formData.urgency as 'low' | 'medium' | 'high' | 'critical',
         hospital_name: formData.hospital_name,
-        hospital_address: `${formData.hospital_address}, ${formData.hospital_area}, ${formData.hospital_city}`,
+        hospital_address: `${formData.hospital_address}, ${formData.hospital_area}, ${formData.hospital_city}`.replace(/,\s*,/g, ',').replace(/^,\s*|,\s*$/g, ''),
         contact_number: formData.contact_phone,
         required_by: formData.required_by,
-        description: formData.description
+        description: formData.description,
+        status: formData.status
       }
 
-      const response = await requestApi.saveDraft(requestData)
+      const response = await requestApi.updateRequest(requestId, updateData)
       
       if (response.success) {
         toast({
-          title: "Draft Saved",
-          description: "Your blood request has been saved as draft",
+          title: "Request Updated",
+          description: "Your blood request has been updated successfully!",
         })
         router.push('/dashboard/requests')
       } else {
         toast({
-          title: "Save Failed",
-          description: response.message || "Failed to save draft",
+          title: "Update Failed",
+          description: response.message || "Failed to update request",
           variant: "destructive",
         })
       }
@@ -134,111 +172,49 @@ export default function CreateRequestPage() {
     }
   }
 
-  const handlePublishRequest = async () => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please login to publish request",
-        variant: "destructive",
-      })
-      return
-    }
-
-    if (!validateForm()) return
-
-    setLoading(true)
-    try {
-      const requestData = {
-        patient_name: formData.patient_name,
-        blood_group: formData.blood_group,
-        units_needed: formData.units_needed,
-        urgency: formData.urgency as 'low' | 'medium' | 'high' | 'critical',
-        hospital_name: formData.hospital_name,
-        hospital_address: `${formData.hospital_address}, ${formData.hospital_area}, ${formData.hospital_city}`,
-        contact_number: formData.contact_phone,
-        required_by: formData.required_by,
-        description: formData.description,
-        status: 'active' as const
-      }
-
-      const response = await requestApi.createRequest(requestData)
-      
-      if (response.success) {
-        toast({
-          title: "Request Published",
-          description: "Your blood request has been published successfully!",
-        })
-        router.push('/dashboard/requests')
-      } else {
-        toast({
-          title: "Publish Failed",
-          description: response.message || "Failed to publish request",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: handleApiError(error),
-        variant: "destructive",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Set default required_by date to tomorrow
   const getTomorrowDate = () => {
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
     return tomorrow.toISOString().split('T')[0]
   }
 
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#264653]"></div>
+          <p className="mt-4 text-muted-foreground">Loading request data...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Create Blood Request</h2>
-          <p className="text-muted-foreground">Request blood donation from donors in your area</p>
+        <div className="flex items-center gap-4">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push('/dashboard/requests')}
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Requests
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Edit Blood Request</h2>
+            <p className="text-muted-foreground">Update your blood request details</p>
+          </div>
         </div>
-        <Button 
-          className="bg-[#264653] hover:bg-[#1e3a45]"
-          onClick={handlePublishRequest}
-          disabled={loading}
-        >
-          <Send className="mr-2 h-4 w-4" />
-          {loading ? "Publishing..." : "Publish Request"}
-        </Button>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Request Information</CardTitle>
-            <CardDescription>Enter details about your blood request</CardDescription>
+            <CardDescription>Update details about your blood request</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="patientType">Patient Type</Label>
-              <RadioGroup 
-                value={formData.patient_type} 
-                onValueChange={(value) => handleInputChange('patient_type', value)}
-                className="space-y-2"
-              >
-                <div className="flex items-center space-x-2 rounded-md border p-2">
-                  <RadioGroupItem value="self" id="self" />
-                  <Label htmlFor="self" className="cursor-pointer">
-                    For myself
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 rounded-md border p-2">
-                  <RadioGroupItem value="relative" id="relative" />
-                  <Label htmlFor="relative" className="cursor-pointer">
-                    For a relative/friend
-                  </Label>
-                </div>
-              </RadioGroup>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="patientName">Patient Name *</Label>
               <Input 
@@ -248,35 +224,6 @@ export default function CreateRequestPage() {
                 onChange={(e) => handleInputChange('patient_name', e.target.value)}
                 required
               />
-              <p className="text-xs text-muted-foreground">
-                This will be visible to donors who respond to your request
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="age">Age</Label>
-              <Input 
-                id="age" 
-                type="number" 
-                placeholder="Enter patient age"
-                value={formData.age}
-                onChange={(e) => handleInputChange('age', e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="gender">Gender</Label>
-              <Select 
-                value={formData.gender} 
-                onValueChange={(value) => handleInputChange('gender', value)}
-              >
-                <SelectTrigger id="gender">
-                  <SelectValue placeholder="Select gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">Male</SelectItem>
-                  <SelectItem value="female">Female</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
@@ -284,7 +231,7 @@ export default function CreateRequestPage() {
         <Card>
           <CardHeader>
             <CardTitle>Blood Requirement</CardTitle>
-            <CardDescription>Specify the blood type and quantity needed</CardDescription>
+            <CardDescription>Update the blood type and quantity needed</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -365,7 +312,7 @@ export default function CreateRequestPage() {
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Hospital Information</CardTitle>
-            <CardDescription>Provide details about the hospital where donation is needed</CardDescription>
+            <CardDescription>Update details about the hospital where donation is needed</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -410,36 +357,14 @@ export default function CreateRequestPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="contactPerson">Contact Person *</Label>
+              <Label htmlFor="contactPhone">Contact Phone *</Label>
               <Input 
-                id="contactPerson" 
-                placeholder="Enter contact person name"
-                value={formData.contact_person}
-                onChange={(e) => handleInputChange('contact_person', e.target.value)}
+                id="contactPhone" 
+                placeholder="Enter contact phone number"
+                value={formData.contact_phone}
+                onChange={(e) => handleInputChange('contact_phone', e.target.value)}
                 required
               />
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="contactPhone">Contact Phone *</Label>
-                <Input 
-                  id="contactPhone" 
-                  placeholder="Enter contact phone number"
-                  value={formData.contact_phone}
-                  onChange={(e) => handleInputChange('contact_phone', e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="contactEmail">Contact Email (Optional)</Label>
-                <Input 
-                  id="contactEmail" 
-                  type="email" 
-                  placeholder="Enter contact email"
-                  value={formData.contact_email}
-                  onChange={(e) => handleInputChange('contact_email', e.target.value)}
-                />
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -447,29 +372,9 @@ export default function CreateRequestPage() {
         <Card className="md:col-span-2">
           <CardHeader>
             <CardTitle>Request Details</CardTitle>
-            <CardDescription>Provide additional information about the request</CardDescription>
+            <CardDescription>Update additional information about the request</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reason">Reason for Requirement</Label>
-              <Select 
-                value={formData.reason} 
-                onValueChange={(value) => handleInputChange('reason', value)}
-              >
-                <SelectTrigger id="reason">
-                  <SelectValue placeholder="Select reason" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="surgery">Surgery</SelectItem>
-                  <SelectItem value="accident">Accident/Trauma</SelectItem>
-                  <SelectItem value="cancer">Cancer Treatment</SelectItem>
-                  <SelectItem value="anemia">Severe Anemia</SelectItem>
-                  <SelectItem value="childbirth">Childbirth Complications</SelectItem>
-                  <SelectItem value="transplant">Organ Transplant</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <div className="space-y-2">
               <Label htmlFor="description">Additional Details</Label>
               <Textarea
@@ -481,39 +386,21 @@ export default function CreateRequestPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>Privacy Settings</Label>
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="sharePatientName" 
-                    checked={formData.share_patient_name}
-                    onCheckedChange={(checked) => handleInputChange('share_patient_name', checked)}
-                  />
-                  <Label htmlFor="sharePatientName" className="cursor-pointer">
-                    Share patient name with donors
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="shareReason" 
-                    checked={formData.share_reason}
-                    onCheckedChange={(checked) => handleInputChange('share_reason', checked)}
-                  />
-                  <Label htmlFor="shareReason" className="cursor-pointer">
-                    Share reason for blood requirement
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="shareContact" 
-                    checked={formData.share_contact}
-                    onCheckedChange={(checked) => handleInputChange('share_contact', checked)}
-                  />
-                  <Label htmlFor="shareContact" className="cursor-pointer">
-                    Share contact information with donors
-                  </Label>
-                </div>
-              </div>
+              <Label htmlFor="status">Request Status</Label>
+              <Select 
+                value={formData.status} 
+                onValueChange={(value) => handleInputChange('status', value)}
+              >
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="fulfilled">Fulfilled</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </CardContent>
         </Card>
@@ -522,21 +409,19 @@ export default function CreateRequestPage() {
       <div className="flex justify-end gap-4">
         <Button 
           variant="outline" 
-          onClick={handleSaveDraft}
-          disabled={saving || loading}
+          onClick={() => router.push('/dashboard/requests')}
         >
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? "Saving..." : "Save as Draft"}
+          Cancel
         </Button>
         <Button 
           className="bg-[#264653] hover:bg-[#1e3a45]"
-          onClick={handlePublishRequest}
-          disabled={loading || saving}
+          onClick={handleSaveChanges}
+          disabled={saving}
         >
-          <Send className="mr-2 h-4 w-4" />
-          {loading ? "Publishing..." : "Publish Request"}
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "Saving..." : "Save Changes"}
         </Button>
       </div>
     </div>
   )
-}
+} 

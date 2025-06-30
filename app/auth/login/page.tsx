@@ -8,26 +8,99 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Loader2 } from "lucide-react"
+import { authApi, handleApiError } from "@/lib/api"
+import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
   const [step, setStep] = useState<"phone" | "otp">("phone")
   const [phoneNumber, setPhoneNumber] = useState("")
   const [otp, setOtp] = useState("")
+  const [loading, setLoading] = useState(false)
+  const { toast } = useToast()
+  const { login } = useAuth()
 
-  const handlePhoneSubmit = (e: React.FormEvent) => {
+  const handlePhoneSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, we would send the OTP to the phone number
-    console.log("Sending OTP to", phoneNumber)
-    setStep("otp")
+    setLoading(true)
+
+    try {
+      const response = await authApi.sendOtp(phoneNumber)
+      
+      if (response.success) {
+        toast({
+          title: "OTP Sent",
+          description: `OTP has been sent to ${phoneNumber}`,
+        })
+        
+        // In development, show the OTP
+        if (response.data?.otp) {
+          toast({
+            title: "Development OTP",
+            description: `Your OTP is: ${response.data.otp}`,
+            variant: "default",
+          })
+        }
+        
+        setStep("otp")
+      } else {
+        toast({
+          title: "Error",
+          description: response.message || "Failed to send OTP",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: handleApiError(error),
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleOtpSubmit = (e: React.FormEvent) => {
+  const handleOtpSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // In a real app, we would verify the OTP
-    console.log("Verifying OTP", otp)
-    // Redirect to dashboard on success
-    window.location.href = "/dashboard"
+    setLoading(true)
+
+    try {
+      const response = await authApi.loginWithOtp(phoneNumber, otp)
+      
+      if (response.success && response.data) {
+        // Store token and user data using auth context
+        login(response.data.token, response.data.user)
+        
+        toast({
+          title: "Login Successful",
+          description: "Welcome back!",
+        })
+        
+        // Redirect based on user type
+        const user = response.data.user
+        if (user.user_type === "hospital") {
+          window.location.href = "/hospital-dashboard"
+        } else {
+          window.location.href = "/dashboard"
+        }
+      } else {
+        toast({
+          title: "Login Failed",
+          description: response.message || "Invalid OTP or user not found",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: handleApiError(error),
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -60,8 +133,19 @@ export default function LoginPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white">
-                Send OTP
+              <Button 
+                type="submit" 
+                className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending OTP...
+                  </>
+                ) : (
+                  "Send OTP"
+                )}
               </Button>
             </form>
           ) : (
@@ -76,10 +160,27 @@ export default function LoginPage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white">
-                Verify OTP
+              <Button 
+                type="submit" 
+                className="w-full bg-[#B83227] hover:bg-[#a12a22] text-white"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying OTP...
+                  </>
+                ) : (
+                  "Verify OTP"
+                )}
               </Button>
-              <Button type="button" variant="link" className="w-full text-[#264653]" onClick={() => setStep("phone")}>
+              <Button 
+                type="button" 
+                variant="link" 
+                className="w-full text-[#264653]" 
+                onClick={() => setStep("phone")}
+                disabled={loading}
+              >
                 Change Phone Number
               </Button>
             </form>
