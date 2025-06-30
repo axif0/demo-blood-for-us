@@ -95,6 +95,26 @@ const createTables = async () => {
       )
     `);
 
+    // Create request_acceptances table for tracking donor acceptances
+    await promisePool.execute(`
+      CREATE TABLE IF NOT EXISTS request_acceptances (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        request_id INT NOT NULL,
+        donor_id INT NOT NULL,
+        status ENUM('pending', 'accepted', 'cancelled') NOT NULL DEFAULT 'accepted',
+        accepted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        
+        FOREIGN KEY (request_id) REFERENCES blood_requests(id) ON DELETE CASCADE,
+        FOREIGN KEY (donor_id) REFERENCES users(id) ON DELETE CASCADE,
+        UNIQUE KEY unique_donor_request (donor_id, request_id),
+        INDEX idx_request_id (request_id),
+        INDEX idx_donor_id (donor_id),
+        INDEX idx_status (status)
+      )
+    `);
+
     // Create user_sessions table for JWT token management
     await promisePool.execute(`
       CREATE TABLE IF NOT EXISTS user_sessions (
@@ -111,7 +131,7 @@ const createTables = async () => {
     `);
 
     console.log('✅ Database migration completed successfully!');
-    console.log('📊 Created tables: users, blood_requests, donations, notifications, user_sessions');
+    console.log('📊 Created tables: users, blood_requests, donations, notifications, request_acceptances, user_sessions');
     
   } catch (error) {
     console.error('❌ Database migration failed:', error.message);
