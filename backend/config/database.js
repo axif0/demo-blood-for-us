@@ -11,9 +11,11 @@ const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  // Remove deprecated options that cause warnings
   acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true
+  idleTimeout: 600000,
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0
 });
 
 // Create promise-based pool for async/await usage
