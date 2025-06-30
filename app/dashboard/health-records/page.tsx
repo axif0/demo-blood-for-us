@@ -132,8 +132,6 @@ export default function HealthRecordsPage() {
             <CardContent>
               <HealthRecordsSummary
                 extended
-                handleDownload={handleDownload}
-                handleShare={handleShare}
               />
             </CardContent>
           </Card>
