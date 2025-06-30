@@ -214,8 +214,8 @@ router.post('/send-otp', async (req, res) => {
       message: 'OTP sent successfully',
       data: {
         phone_number,
-        // In production, don't send OTP in response
-        otp: process.env.NODE_ENV === 'development' ? otp : undefined
+        // Show OTP for testing (remove this when SMS service is ready)
+        otp: otp
       }
     });
 
