@@ -21,14 +21,17 @@ import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
 
-export default function DonationDetailsPage({
+export default async function DonationDetailsPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  // Await params in Next.js 15
+  const { id } = await params;
+  
   // Mock data - in a real app, you would fetch this data based on the ID
   const donation = {
-    id: params.id,
+    id: id,
     date: "2023-05-15T10:30:00Z",
     location: "City Hospital Blood Bank",
     address: "123 Main St, Cityville",

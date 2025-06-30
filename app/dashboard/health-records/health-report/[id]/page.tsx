@@ -22,14 +22,17 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 
-export default function HealthReportDetailsPage({
+export default async function HealthReportDetailsPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  // Await params in Next.js 15
+  const { id } = await params;
+  
   // Mock data - in a real app, you would fetch this data based on the ID
   const report = {
-    id: params.id,
+    id: id,
     date: "2023-05-10T09:15:00Z",
     status: "Completed",
     summary:

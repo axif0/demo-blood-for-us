@@ -134,14 +134,17 @@ const donors = [
   },
 ]
 
-export default function DonorProfilePage({
+export default async function DonorProfilePage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
-  const id = Number(params.id)
+  // Await params in Next.js 15
+  const { id: idParam } = await params;
+  const id = Number(idParam)
+  
   const donor = {
-    id: params.id,
+    id: idParam,
     name: donors[id].name,
     username: donors[id].userName,
     avatar: `/${donors[id].image}?height=100&width=100`,

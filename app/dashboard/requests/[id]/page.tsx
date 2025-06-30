@@ -13,14 +13,17 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
-export default function RequestDetailsPage({
+export default async function RequestDetailsPage({
   params,
 }: {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }) {
+  // Await params in Next.js 15
+  const { id } = await params;
+  
   // Mock data - in a real app, you would fetch this data based on the ID
   const request = {
-    id: params.id,
+    id: id,
     title: "Emergency Blood Needed",
     bloodType: "O+",
     status: "Active",
