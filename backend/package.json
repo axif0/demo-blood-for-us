@@ -1,34 +1,36 @@
 {
   "name": "blood-for-us-backend",
   "version": "1.0.0",
-  "description": "Backend API for Blood For Us application",
+  "description": "Backend API for Blood For Us platform",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "dev:local": "NODE_ENV=development nodemon server.js",
+    "start:production": "NODE_ENV=production node server.js",
     "migrate": "node database/migrate.js"
   },
+  "keywords": [
+    "blood",
+    "donation",
+    "healthcare",
+    "nodejs",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
-    "mysql2": "^3.6.5",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
-    "express-rate-limit": "^7.1.5"
+    "express-rate-limit": "^7.1.5",
+    "dotenv": "^16.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "bcryptjs": "^2.4.3",
+    "express-validator": "^7.0.1",
+    "mysql2": "^3.6.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
-  },
-  "keywords": [
-    "blood-donation",
-    "healthcare",
-    "api",
-    "mysql",
-    "express"
-  ],
-  "author": "Blood For Us Team",
-  "license": "MIT"
+  }
 } 

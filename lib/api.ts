@@ -1,5 +1,15 @@
 // API configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+const getApiBaseUrl = () => {
+  // Check if we're in production environment
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://31.97.142.243:5000/api'
+  }
+  
+  // Development environment
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // Types for API responses
 export interface ApiResponse<T> {
